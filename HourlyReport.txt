@@ -1,0 +1,271 @@
+/* Built off of 7-30-2015 | Hourly Report
+8-28-2015-Start
+Continue fixing yesterday to just show the hour of stats, then work on last week's avg
+
+8-27-2015-End
+Working Yesterday still, but cleaned up code by removing extra functions and making 3 into 1 functions instead
+
+8-27-2015-Start 
+Adding a Yesterday Comparison, Last Week Avg, Last Month Avg (yesterday's value and % different from it, last week&month just avg)
+
+*/
+
+function main() {
+  //Get All Display & Search campaigns, that are enabled or have cost > 0
+  //1st
+  var displays = getDisplay();
+  //2nd
+  var searchs = getSearch();
+  
+  //Opens Spreadsheet
+  //3rd
+  var HourSS = openSpreadsheet();
+  
+  //Deletes Title rows of Display, Search, Account Sheet
+  //4th
+  deleteFirstRow(HourSS);
+  
+  //Logs All previous values to get a 7 Day Daily value at the current time(overview of 6th & 7th)
+  //5th &
+  //Get Display,Search,Account Columns values 
+  //6th &&
+  //Get Hourly Averages for Display,Search,Account
+  //7th 
+  var sheetValues = getAllValuesOnSpreadSheet(HourSS);
+  var yesterdayValues = getYesterdayValues(sheetValues);
+  var avgEntireSheetValues = getAvgEntireSheetValues(sheetValues);
+  //Appends, Sorts & Add the First Row Back
+  //8th 1 of a set of 3
+  var displayArray = insertADisplayRow(HourSS, displays, avgEntireSheetValues[0], yesterdayValues[0]);
+  //8th 2 of a set of 3
+  var searchArray = insertASearchRow(HourSS, searchs, avgEntireSheetValues[1], yesterdayValues[1]);
+  //Takes the 2 Arrays and adds them to the Account Spread Sheet
+  //8th 3 of a set of 3
+  insertRowAccount(HourSS, displayArray, searchArray, avgEntireSheetValues[2], yesterdayValues[2]);
+  
+}//-------------------------------------------------------------------------END OF MAIN-----------------------------------------------------------------------------------------
+
+
+
+//1st
+function getDisplay() {
+ var displayCampaigns = AdWordsApp.campaigns().withCondition("Name CONTAINS_IGNORE_CASE '| D |'").withCondition('CampaignStatus = ENABLED').get();
+   return displayCampaigns;
+} 
+//2nd
+function getSearch() {
+ var searchCampaigns = AdWordsApp.campaigns().withCondition("Name CONTAINS_IGNORE_CASE '| S |'").withCondition('CampaignStatus = ENABLED').get();
+   return searchCampaigns;
+}
+//3rd
+function openSpreadsheet() {
+  var SPREADSHEET_URL = 'https://docs.google.com/spreadsheets/d/1QpTPEzg92lDBWruOutkLRVg3iSfOa4P6dtUabY5es4Y/edit#gid=0';
+  var ss = SpreadsheetApp.openByUrl(SPREADSHEET_URL);
+  return ss;
+}
+//4th
+function deleteFirstRow(HourSS) {
+  var SHEET_NAME = ["Display","Account","Search"];
+  var displaySheet = HourSS.getSheetByName(SHEET_NAME[0]);
+  var accountSheet = HourSS.getSheetByName(SHEET_NAME[1]);
+  var searchSheet = HourSS.getSheetByName(SHEET_NAME[2]);
+  displaySheet.deleteRow(1);
+  accountSheet.deleteRow(1);
+  searchSheet.deleteRow(1); 
+}
+//5th, 6th
+function getAllValuesOnSpreadSheet(HourSS) {  
+ var displaySheet = HourSS.getSheetByName("Display");
+ var searchSheet = HourSS.getSheetByName("Search");
+ var accountSheet = HourSS.getSheetByName("Account");
+  
+ //6thCALL - get Display,Search,Account Columns values 
+ // var sheetArray = [displaySheet, searchSheet, accountSheet]; --OUTDATED DELETE IF WORKING
+ var colDisplayArray = returnArrayOfColumns(displaySheet);
+ var colSearchArray = returnArrayOfColumns(searchSheet);
+ var colAccountArray = returnArrayOfColumns(accountSheet);
+  
+ //could of just set each of the returns to arrayValues[0],arrayValues[1],arrayValues[2] then return it, eliminating all the variables
+  var arrayValues = [colDisplayArray, colSearchArray, colAccountArray];
+  return arrayValues;//to Main
+  
+} // END OF getAllValuesOnSpreadSheet
+
+
+//6th
+function returnArrayOfColumns(sheetArray) {  
+  //Last Row Index, for it to know when to stop counting
+  var lastRowIndex = sheetArray.getLastRow();
+  var sheet = sheetArray;
+  Logger.log('Were in ArrayOfColumns: ' + sheet.getName());
+  //Gets Column B Values Starts Row1, Column 2, End at lastRowIndex, 1 Column
+  var costRange = sheet.getRange(1, 2, lastRowIndex, 1);
+  var costValues = costRange.getValues();
+  //Gets Column C Values Starts Row1, Column 2, End at lastRowIndex, 1 Column
+  var convRange = sheet.getRange(1, 3, lastRowIndex, 1);
+  var convValues = convRange.getValues(); 
+  //Gets Column D Values Starts Row1, Column 2, End at lastRowIndex, 1 Column
+  var costPconvRange = sheet.getRange(1, 4, lastRowIndex, 1);
+  var costPconvValues = costPconvRange.getValues();   
+  //Gets Column E Values Starts Row1, Column 2, End at lastRowIndex, 1 Column
+  var clicksRange = sheet.getRange(1, 5, lastRowIndex, 1);
+  var clicksValues = clicksRange.getValues(); 
+  //Gets Column F Values Starts Row1, Column 2, End at lastRowIndex, 1 Column
+  var imprRange = sheet.getRange(1, 6, lastRowIndex, 1);
+  var imprValues = imprRange.getValues();  
+  //Placed into an Array so it can return all object at once
+  var columnsArray = [costValues, convValues, clicksValues, imprValues];
+
+  return columnsArray;//to 
+} 
+
+
+//-----------------------get (Sheet) Avg----------------------------------------------
+function getYesterdayValues(sheetValues) {
+  //Calls getYesterdayAverages
+   var displayAvg = getYesterdayAverages(sheetValues[0]);
+  var searchAvg = getYesterdayAverages(sheetValues[1]);
+  var accountAvg = getYesterdayAverages(sheetValues[2]);
+  return [displayAvg, searchAvg, accountAvg]
+}
+function getYesterdayAverages(sheetValues) {
+ var colArray = sheetValues;
+  
+ var costValues = colArray[0];
+ var convValues = colArray[1];
+ var clicksValues = colArray[2];
+ var imprValues = colArray[3];
+  
+ //var modCounter = 0; 
+ var costSum = 0;
+ var convSum = 0;
+ var clicksSum = 0;
+ var imprSum = 0;
+  //Logger.log(costValues.length);
+  //for(var i = 24; i < 2; i++) {
+    //if(i%24==0){
+      //Logger.log(i + '  ' + costValues[24]);
+      //modCounter++;
+      costSum = parseInt(costValues[23]);
+      convSum = parseInt(convValues[23]);
+      clicksSum = parseInt(clicksValues[23]);
+      imprSum = parseInt(imprValues[23]);
+    //} 
+  //}  
+  var yesterdayArray = [costSum, convSum, clicksSum, imprSum];
+  //var avgArray = [costSum/modCounter, convSum/modCounter, clicksSum/modCounter, imprSum/modCounter];
+  Logger.log('Yesterdays Values: ' + '  Cost Sum: ' + costSum);
+  //only returns the average cost, needs to be an Array of avg Cost, conv, clicks, impr
+  return yesterdayArray;//to Main
+} 
+
+function getAvgEntireSheetValues (sheetValues){
+  //7thCALL - get Hourly Averages for Display,Search,Account 
+  var displayAvg = getEntireAverages(sheetValues[0]);
+  var searchAvg = getEntireAverages(sheetValues[1]);
+  var accountAvg = getEntireAverages(sheetValues[2]);
+  return [displayAvg, searchAvg, accountAvg]
+}
+
+//7th
+function getEntireAverages(sheetArray) {
+ var colArray = sheetArray;
+  
+ var costValues = colArray[0];
+ var convValues = colArray[1];
+ var clicksValues = colArray[2];
+ var imprValues = colArray[3];
+  
+ var modCounter = 0; 
+ var costSum = 0;
+ var convSum = 0;
+ var clicksSum = 0;
+ var imprSum = 0;
+  Logger.log(costValues.length);
+  for(var i = 1; i < costValues.length; i++) {
+    if(i%24==0){
+      Logger.log(i + '  ' + costValues[i-1]);
+      modCounter++;
+      costSum += parseInt(costValues[i-1]);
+      convSum += parseInt(convValues[i-1]);
+      clicksSum += parseInt(clicksValues[i-1]);
+      imprSum += parseInt(imprValues[i-1]);
+    } 
+  }  
+  var avgArray = [costSum/modCounter, convSum/modCounter, clicksSum/modCounter, imprSum/modCounter];
+  Logger.log('Mod Counter: ' + modCounter + '  Cost Sum: ' + costSum + ' avg is: ' + costSum/modCounter);
+  //only returns the average cost, needs to be an Array of avg Cost, conv, clicks, impr
+  return avgArray;//to
+}  
+//-----------------------END OF get (Sheet) Avg----------------------------------------------
+
+
+
+//--------------------------------insert A (Each Sheet Display,Search,Account) Row---------------------------------------
+//8th 1 of 3
+function insertADisplayRow(HourSS, displays, disAvg, yesterdayValue) {
+ var SHEET_NAME = 'Display';
+ var displaySheet = HourSS.getSheetByName(SHEET_NAME);
+  
+ var sumCost = 0;
+ var sumConversions = 0;
+ var sumClicks = 0;
+ var sumImpr = 0;
+  //Cycles through only Display Campaigns adding each to the individual attribute
+  while(displays.hasNext()) {
+   var nextDisplay = displays.next();
+   var nextStats = nextDisplay.getStatsFor("TODAY");
+    sumCost += nextStats.getCost();
+    sumConversions += nextStats.getConvertedClicks();
+    sumClicks += nextStats.getClicks();
+    sumImpr += nextStats.getImpressions();
+  }
+  //Displays the Sum of the All the displays combined
+  displaySheet.appendRow([new Date(), sumCost.toFixed(2) +' ('+yesterdayValue[0].toFixed(2) +') ' + ' ('+disAvg[0].toFixed(2)+') ', sumConversions +' ('+yesterdayValue[1].toFixed(2) +') ' + ' ('+disAvg[1].toFixed(2)+') ', (sumCost/sumConversions).toFixed(2) +' ('+(yesterdayValue[0]/yesterdayValue[1]).toFixed(2) +') ' + ' ('+(disAvg[0]/disAvg[1]).toFixed(2)+') ',sumClicks +' ('+yesterdayValue[2].toFixed(2) +') ' + ' ('+disAvg[2].toFixed(2)+') ',sumImpr +' ('+yesterdayValue[3].toFixed(2) +') ' + ' ('+disAvg[3].toFixed(2)+') ', displays.totalNumEntities()]);;
+  //Add the Title Row back to display sheet
+  displaySheet.appendRow(["Date and Time", "Cost / Yesterday / AVG", "Conversions / Yesterday / AVG", "Cost / Conv / Yesterday / AVG", "Clicks / Yesterday / AVG", "Impressions / Yesterday / AVG", "# of Display Campaigns"]);
+  //Sorts, false=descending, the first row, with the date: to allow the new row to be the first row
+  displaySheet.sort(1, false);
+  return [sumCost, sumConversions, sumCost/sumConversions, sumClicks, sumImpr, displays.totalNumEntities()];
+  //to
+}
+//8th 2 of 3
+function insertASearchRow(HourSS, searchs, searchAvg, yesterdayValue) {
+ var SHEET_NAME = 'Search';
+ var searchSheet = HourSS.getSheetByName(SHEET_NAME);
+  
+  var sumCost = 0;
+  var sumConversions = 0;
+  var sumClicks = 0;
+  var sumImpr = 0;
+  while(searchs.hasNext()) {
+   var nextSearch = searchs.next();
+   var nextStats = nextSearch.getStatsFor("TODAY");
+    sumCost += nextStats.getCost();
+    sumConversions += nextStats.getConvertedClicks();
+    sumClicks += nextStats.getClicks();
+    sumImpr += nextStats.getImpressions();
+  }  
+  //Prints the Sum of All the Search stats to the spreadsheet
+  searchSheet.appendRow([new Date(), sumCost.toFixed(2) +' ('+yesterdayValue[0].toFixed(2) +') '  + ' ('+searchAvg[0].toFixed(2)+') ', sumConversions +' ('+yesterdayValue[1].toFixed(2) +') '  + ' ('+searchAvg[1].toFixed(2)+') ', (sumCost/sumConversions).toFixed(2) +' ('+(yesterdayValue[0]/yesterdayValue[1]).toFixed(2) +') ' + ' ('+(searchAvg[0]/searchAvg[1]).toFixed(2)+') ', sumClicks  +' ('+yesterdayValue[2].toFixed(2) +') ' + ' ('+searchAvg[2].toFixed(2)+') ', sumImpr +' ('+yesterdayValue[3].toFixed(2) +') '  + ' ('+searchAvg[3].toFixed(2)+') ', searchs.totalNumEntities()]);
+  //Add the Title Row back to display sheet
+  searchSheet.appendRow(["Date and Time", "Cost / Yesterday / AVG", "Conversions / Yesterday / AVG", "Cost / Conv / Yesterday / AVG", "Clicks / Yesterday / AVG", "Impressions / Yesterday / AVG", "# of Display Campaigns"]);
+  //Sorts, false=descending, the first row, with the date: to allow the new row to be the first row
+  searchSheet.sort(1, false);
+  return [sumCost, sumConversions, sumCost/sumConversions, sumClicks, sumImpr, searchs.totalNumEntities()];
+  //to
+} 
+//8th 3 of 3
+function insertRowAccount(HourSS, displayArray, searchArray, accAvg, yesterdayValue) {
+  var SHEET_NAME = 'Account';
+  var accountSheet = HourSS.getSheetByName('Account');
+  //Array holds: sumCost0, sumConversions1, sumCost/sumConversions2, sumClicks3, sumImpr4, searchs.totalNumEntities()5 
+  var newArray = [displayArray[0] + searchArray[0], displayArray[1] + searchArray[1], displayArray[2] + searchArray[2], displayArray[3] + searchArray[3], displayArray[4] + searchArray[4],displayArray[5] + searchArray[5]];
+  //Note: 3 object is cost per conversion which does the math here, math from the newArray was wrong.
+  accountSheet.appendRow([new Date, newArray[0].toFixed(2)  +' ('+yesterdayValue[0].toFixed(2) +') ' + ' ('+accAvg[0].toFixed(2)+') ',newArray[1] +' ('+yesterdayValue[1].toFixed(2) +') '  + ' ('+accAvg[1].toFixed(2)+') ',(newArray[0]/newArray[1]).toFixed(2) +' ('+(yesterdayValue[0]/yesterdayValue[1]).toFixed(2) +') ' + ' ('+(accAvg[0]/accAvg[1]).toFixed(2)+') ',newArray[3]  +' ('+yesterdayValue[2].toFixed(2) +') ' + ' ('+accAvg[2].toFixed(2)+') ',newArray[4]  +' ('+yesterdayValue[3].toFixed(2) +') ' + ' ('+accAvg[3].toFixed(2)+') ',newArray[5]]);
+  //Add the Title Row back to display sheet
+  accountSheet.appendRow(["Date and Time", "Cost / Yesterday / AVG", "Conversions / Yesterday / AVG", "Cost / Conv / Yesterday / AVG", "Clicks / Yesterday / AVG", "Impressions / Yesterday / AVG", "# of Display Campaigns"]);
+  //Sorts, false=descending, the first row, with the date: to allow the new row to be the first row
+  accountSheet.sort(1, false);
+  Logger.log('Finished Account Sheet');
+}//--------------------------------END OF insert A (sheet) Row---------------------------------------
